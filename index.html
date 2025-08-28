@@ -4,21 +4,36 @@
 <meta charset="UTF-8">
 <title>Daily Mini Crossword</title>
 <style>
-/* --- Dark Mode Default --- */
 body {
   font-family: sans-serif;
-  text-align: center;
   background-color: #121212;
   color: #f0f0f0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   transition: background 0.3s, color 0.3s;
 }
-table {
+header {
+  width: 100%;
+  text-align: center;
+  padding: 10px 0;
+  font-size: 24px;
+  font-weight: bold;
+}
+.container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
+#grid {
   border-collapse: collapse;
-  margin: 0 auto;
 }
 td {
-  width: 60px;  /* bigger */
-  height: 60px; /* bigger */
+  width: 60px;
+  height: 60px;
   border: 2px solid #f0f0f0;
   text-align: center;
   vertical-align: middle;
@@ -29,28 +44,21 @@ input {
   height: 100%;
   border: none;
   text-align: center;
-  font-size: 28px; /* bigger */
+  font-size: 28px;
   background-color: #1e1e1e;
   color: #f0f0f0;
 }
-.blank {
-  background: black;
+.blank { background: black; }
+.highlight { background-color: #ffeb3b; color: #000; }
+.correct { background-color: #4caf50; color: #fff; }
+.incorrect { background-color: #f44336; color: #fff; }
+.clues {
+  max-height: 500px;
+  overflow-y: auto;
+  margin-left: 20px;
+  font-size: 18px;
 }
-.highlight {
-  background-color: #ffeb3b; /* yellow */
-  color: #000;
-}
-.correct {
-  background-color: #4caf50; /* green */
-  color: #fff;
-}
-.incorrect {
-  background-color: #f44336; /* red */
-  color: #fff;
-}
-.buttons {
-  margin-top: 15px;
-}
+.clues h3 { margin-bottom: 5px; }
 button {
   font-size: 18px;
   padding: 10px 16px;
@@ -59,32 +67,26 @@ button {
   border-radius: 8px;
   border: none;
 }
-#timer {
-  font-size: 20px;
-  margin-top: 10px;
-}
-/* Light Mode */
+#timer { font-size: 20px; margin-top: 10px; text-align: center; width: 100%; }
 body.light {
   background-color: #f0f0f0;
   color: #121212;
 }
-body.light input {
-  background-color: #fff;
-  color: #000;
-}
-body.light td {
-  border: 2px solid #121212;
-}
+body.light input { background-color: #fff; color: #000; }
+body.light td { border: 2px solid #121212; }
 </style>
 </head>
 <body>
-<h1>Daily Mini Crossword</h1>
+<header>Daily Mini Crossword - Last updated: <span id="lastUpdated"></span></header>
 <button onclick="toggleDarkMode()">Toggle Dark/Light Mode</button>
-<div id="game"></div>
+<div class="container">
+  <div id="game"></div>
+  <div class="clues" id="clues"></div>
+</div>
 <div class="buttons">
-<button onclick="checkAnswers()">Check Answers</button>
-<button onclick="revealWord()">Reveal Word</button>
-<button onclick="revealPuzzle()">Reveal Puzzle</button>
+  <button onclick="checkAnswers()">Check Answers</button>
+  <button onclick="revealWord()">Reveal Word</button>
+  <button onclick="revealPuzzle()">Reveal Puzzle</button>
 </div>
 <p id="result"></p>
 <p id="timer">Time: 0s</p>
@@ -107,21 +109,18 @@ let acrossMode = true;
 let timer = 0;
 let timerInterval = null;
 
-/* --- Dark Mode Toggle --- */
-function toggleDarkMode(){
-  document.body.classList.toggle("light");
-}
+/* --- Last Updated Date --- */
+document.getElementById("lastUpdated").textContent = "2025-08-28";
+
+/* --- Dark Mode --- */
+function toggleDarkMode(){ document.body.classList.toggle("light"); }
 
 /* --- Timer --- */
-function startTimer() {
-  clearInterval(timerInterval);
-  timer = 0;
-  document.getElementById("timer").textContent = `Time: 0s`;
-  timerInterval = setInterval(()=>{ timer++; document.getElementById("timer").textContent=`Time: ${timer}s`; },1000);
-}
+function startTimer(){ clearInterval(timerInterval); timer=0; document.getElementById("timer").textContent=`Time: 0s`;
+timerInterval=setInterval(()=>{timer++; document.getElementById("timer").textContent=`Time: ${timer}s`;},1000); }
 
-/* --- Render Puzzle --- */
-function renderPuzzle(puzzle) {
+/* --- Render Puzzle & Clues --- */
+function renderPuzzle(puzzle){
   const gameDiv=document.getElementById("game");
   let gridHTML="<table id='grid'>";
   puzzle.grid.forEach((row,r)=>{
@@ -133,37 +132,31 @@ function renderPuzzle(puzzle) {
     gridHTML+="</tr>";
   });
   gridHTML+="</table>";
+  gameDiv.innerHTML=gridHTML;
+  document.querySelectorAll("#grid input").forEach(input=>input.addEventListener("keydown",handleNavigation));
 
+  /* Clues */
   let cluesHTML="<h3>Across</h3><ul>";
   for(const [num,clue] of Object.entries(puzzle.clues.across)) cluesHTML+=`<li>${num}. ${clue}</li>`;
   cluesHTML+="</ul><h3>Down</h3><ul>";
   for(const [num,clue] of Object.entries(puzzle.clues.down)) cluesHTML+=`<li>${num}. ${clue}</li>`;
   cluesHTML+="</ul>";
-
-  gameDiv.innerHTML=gridHTML+cluesHTML;
-  document.querySelectorAll("#grid input").forEach(input=>input.addEventListener("keydown", handleNavigation));
+  document.getElementById("clues").innerHTML=cluesHTML;
 }
 
-/* --- Input Filter & Auto-Advance --- */
+/* --- Input & Auto-Advance --- */
 function filterInput(inputEl){
-  let val=inputEl.value.toUpperCase().replace(/[^A-Z]/g,"");
-  inputEl.value=val;
-  if(val){
-    const row=parseInt(inputEl.dataset.row), col=parseInt(inputEl.dataset.col);
-    if(acrossMode){
-      const nextCell=document.querySelector(`#grid input[data-row='${row}'][data-col='${col+1}']`);
-      if(nextCell) nextCell.focus();
-    }else{
-      const nextCell=document.querySelector(`#grid input[data-row='${row+1}'][data-col='${col}']`);
-      if(nextCell) nextCell.focus();
-    }
+  let val=inputEl.value.toUpperCase().replace(/[^A-Z]/g,""); inputEl.value=val;
+  if(val){ const row=parseInt(inputEl.dataset.row),col=parseInt(inputEl.dataset.col);
+    if(acrossMode){ const nextCell=document.querySelector(`#grid input[data-row='${row}'][data-col='${col+1}']`); if(nextCell) nextCell.focus();}
+    else{ const nextCell=document.querySelector(`#grid input[data-row='${row+1}'][data-col='${col}']`); if(nextCell) nextCell.focus();}
   }
   checkWin();
 }
 
-/* --- Navigation & Across/Down Toggle --- */
+/* --- Navigation --- */
 function handleNavigation(e){
-  const row=parseInt(this.dataset.row), col=parseInt(this.dataset.col);
+  const row=parseInt(this.dataset.row),col=parseInt(this.dataset.col);
   const nextCell=(r,c)=>document.querySelector(`#grid input[data-row='${r}'][data-col='${c}']`);
   switch(e.key){
     case "ArrowUp": e.preventDefault(); if(row>0) nextCell(row-1,col)?.focus(); break;
@@ -171,105 +164,48 @@ function handleNavigation(e){
     case "ArrowLeft": e.preventDefault(); if(col>0) nextCell(row,col-1)?.focus(); break;
     case "ArrowRight": e.preventDefault(); if(col<currentPuzzle.grid[row].length-1) nextCell(row,col+1)?.focus(); break;
     case "Backspace":
-      if(this.value===""){
-        if(acrossMode && col>0) nextCell(row,col-1)?.focus();
-        else if(!acrossMode && row>0) nextCell(row-1,col)?.focus();
-      } else this.value="";
-      break;
+      if(this.value===""){ if(acrossMode && col>0) nextCell(row,col-1)?.focus(); else if(!acrossMode && row>0) nextCell(row-1,col)?.focus();}
+      else this.value=""; break;
     case " ": e.preventDefault(); acrossMode=!acrossMode; highlightWord(this); break;
   }
 }
 
-/* --- Active Cell & Highlight --- */
-function getActiveCell(){
-  const active=document.activeElement;
-  if(active && active.tagName==="INPUT") return {row:parseInt(active.dataset.row), col:parseInt(active.dataset.col)};
-  return null;
-}
-
+/* --- Highlight Word --- */
+function getActiveCell(){ const a=document.activeElement; if(a && a.tagName==="INPUT") return {row:parseInt(a.dataset.row),col:parseInt(a.dataset.col)}; return null;}
 function highlightWord(inputEl){
   document.querySelectorAll("#grid input").forEach(i=>i.classList.remove("highlight"));
-  const row=parseInt(inputEl.dataset.row), col=parseInt(inputEl.dataset.col);
+  const row=parseInt(inputEl.dataset.row),col=parseInt(inputEl.dataset.col);
   if(acrossMode){
     let c=col; while(c>=0 && currentPuzzle.grid[row][c]!=="") c--; c++;
-    while(c<currentPuzzle.grid[row].length && currentPuzzle.grid[row][c]!==""){
-      document.querySelector(`#grid input[data-row='${row}'][data-col='${c}']`)?.classList.add("highlight"); c++;
-    }
-  }else{
+    while(c<currentPuzzle.grid[row].length && currentPuzzle.grid[row][c]!==""){ document.querySelector(`#grid input[data-row='${row}'][data-col='${c}']`)?.classList.add("highlight"); c++; }
+  } else{
     let r=row; while(r>=0 && currentPuzzle.grid[r][col]!=="") r--; r++;
-    while(r<currentPuzzle.grid.length && currentPuzzle.grid[r][col]!==""){
-      document.querySelector(`#grid input[data-row='${r}'][data-col='${col}']`)?.classList.add("highlight"); r++;
-    }
+    while(r<currentPuzzle.grid.length && currentPuzzle.grid[r][col]!==""){ document.querySelector(`#grid input[data-row='${r}'][data-col='${col}']`)?.classList.add("highlight"); r++; }
   }
 }
 
-/* --- Check Win --- */
+/* --- Win Check --- */
 function checkWin(){
   let allCorrect=true;
-  document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{
-    rowEl.querySelectorAll("td").forEach((cellEl,c)=>{
-      const inputEl=cellEl.querySelector("input");
-      if(inputEl && currentPuzzle.grid[r][c]){
-        if(inputEl.value.toUpperCase()!==currentPuzzle.grid[r][c]) allCorrect=false;
-      }
-    });
-  });
-  if(allCorrect){
-    document.getElementById("result").textContent=`🎉 Solved in ${timer}s!`;
-    document.querySelectorAll("#grid input").forEach(i=>i.classList.add("correct"));
-    clearInterval(timerInterval);
-  }
+  document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{ rowEl.querySelectorAll("td").forEach((cellEl,c)=>{
+    const inputEl=cellEl.querySelector("input"); if(inputEl && currentPuzzle.grid[r][c]){ if(inputEl.value.toUpperCase()!==currentPuzzle.grid[r][c]) allCorrect=false;}
+  }); });
+  if(allCorrect){ document.getElementById("result").textContent=`🎉 Solved in ${timer}s!`; document.querySelectorAll("#grid input").forEach(i=>i.classList.add("correct")); clearInterval(timerInterval);}
 }
 
-/* --- Check, Reveal Word, Reveal Puzzle --- */
-function checkAnswers(){
-  document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{
-    rowEl.querySelectorAll("td").forEach((cellEl,c)=>{
-      const inputEl=cellEl.querySelector("input");
-      if(inputEl && currentPuzzle.grid[r][c]){
-        if(inputEl.value.toUpperCase()===currentPuzzle.grid[r][c]){
-          inputEl.classList.add("correct"); inputEl.classList.remove("incorrect");
-        } else { inputEl.classList.add("incorrect"); inputEl.classList.remove("correct"); }
-      }
-    });
-  });
-  checkWin();
-}
+/* --- Buttons --- */
+function checkAnswers(){ document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{ rowEl.querySelectorAll("td").forEach((cellEl,c)=>{ const inputEl=cellEl.querySelector("input"); if(inputEl && currentPuzzle.grid[r][c]){ if(inputEl.value.toUpperCase()===currentPuzzle.grid[r][c]){ inputEl.classList.add("correct"); inputEl.classList.remove("incorrect"); } else { inputEl.classList.add("incorrect"); inputEl.classList.remove("correct"); }}}); }); checkWin(); }
 
-function revealPuzzle(){
-  document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{
-    rowEl.querySelectorAll("td").forEach((cellEl,c)=>{
-      const inputEl=cellEl.querySelector("input");
-      if(inputEl && currentPuzzle.grid[r][c]){
-        inputEl.value=currentPuzzle.grid[r][c]; inputEl.classList.add("correct");
-      }
-    });
-  });
-  document.getElementById("result").textContent="✨ Puzzle revealed!";
-}
+function revealPuzzle(){ document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{ rowEl.querySelectorAll("td").forEach((cellEl,c)=>{ const inputEl=cellEl.querySelector("input"); if(inputEl && currentPuzzle.grid[r][c]){ inputEl.value=currentPuzzle.grid[r][c]; inputEl.classList.add("correct");}}); }); document.getElementById("result").textContent="✨ Puzzle revealed!"; }
 
 function revealWord(){
-  const cell=getActiveCell();
-  if(!cell){ document.getElementById("result").textContent="Click a cell first!"; return; }
-  if(acrossMode){
-    let startCol=cell.col; while(startCol>0 && currentPuzzle.grid[cell.row][startCol-1]!=="") startCol--;
-    let c=startCol;
-    while(c<currentPuzzle.grid[cell.row].length && currentPuzzle.grid[cell.row][c]!==""){
-      const inputEl=document.querySelector(`#grid input[data-row='${cell.row}'][data-col='${c}']`);
-      inputEl.value=currentPuzzle.grid[cell.row][c]; inputEl.classList.add("correct"); c++;
-    }
-  }else{
-    let startRow=cell.row; while(startRow>0 && currentPuzzle.grid[startRow-1][cell.col]!=="") startRow--;
-    let r=startRow;
-    while(r<currentPuzzle.grid.length && currentPuzzle.grid[r][cell.col]!==""){
-      const inputEl=document.querySelector(`#grid input[data-row='${r}'][data-col='${cell.col}']`);
-      inputEl.value=currentPuzzle.grid[r][cell.col]; inputEl.classList.add("correct"); r++;
-    }
-  }
+  const cell=getActiveCell(); if(!cell){ document.getElementById("result").textContent="Click a cell first!"; return;}
+  if(acrossMode){ let startCol=cell.col; while(startCol>0 && currentPuzzle.grid[cell.row][startCol-1]!=="") startCol--; let c=startCol; while(c<currentPuzzle.grid[cell.row].length && currentPuzzle.grid[cell.row][c]!==""){ const inputEl=document.querySelector(`#grid input[data-row='${cell.row}'][data-col='${c}']`); inputEl.value=currentPuzzle.grid[cell.row][c]; inputEl.classList.add("correct"); c++; }}
+  else{ let startRow=cell.row; while(startRow>0 && currentPuzzle.grid[startRow-1][cell.col]!=="") startRow--; let r=startRow; while(r<currentPuzzle.grid.length && currentPuzzle.grid[r][cell.col]!==""){ const inputEl=document.querySelector(`#grid input[data-row='${r}'][data-col='${cell.col}']`); inputEl.value=currentPuzzle.grid[r][cell.col]; inputEl.classList.add("correct"); r++; }}
   document.getElementById("result").textContent="💡 Word revealed!";
 }
 
-/* --- Initialize --- */
+/* --- Init --- */
 renderPuzzle(currentPuzzle);
 startTimer();
 </script>
