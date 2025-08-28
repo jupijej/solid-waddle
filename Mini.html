@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Mini Crossword</title>
+<style>
+body { font-family: sans-serif; text-align: center; }
+table { border-collapse: collapse; margin: 0 auto; }
+td { width: 40px; height: 40px; border: 1px solid black; text-align: center; vertical-align: middle; position: relative; }
+input { width: 100%; height: 100%; border: none; text-align: center; font-size: 20px; }
+.blank { background: black; }
+.highlight { background-color: #fff59d; }
+.correct { background-color: #c8e6c9; }
+.incorrect { background-color: #ffcdd2; }
+.buttons { margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>Daily Mini Crossword</h1>
+<div id="game"></div>
+<div class="buttons">
+<button onclick="checkAnswers()">Check Answers</button>
+<button onclick="revealWord()">Reveal Word</button>
+<button onclick="revealPuzzle()">Reveal Puzzle</button>
+</div>
+<p id="result"></p>
+<p id="timer">Time: 0s</p>
+
+<script>
+let currentPuzzle = {
+  grid: [
+    ["C","A","T","",""],
+    ["","","R","",""],
+    ["","","O","W","L"],
+    ["","","","",""],
+    ["","","","",""]
+  ],
+  clues: {
+    across: { "1": "Common house pet", "3": "Nocturnal bird" },
+    down: { "2": "Feline sound", "4": "Wise bird" }
+  }
+};
+let acrossMode = true;
+let timer = 0;
+let timerInterval = null;
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timer = 0;
+  document.getElementById("timer").textContent = `Time: 0s`;
+  timerInterval = setInterval(() => {
+    timer++;
+    document.getElementById("timer").textContent = `Time: ${timer}s`;
+  }, 1000);
+}
+
+function renderPuzzle(puzzle) {
+  const gameDiv = document.getElementById("game");
+  let gridHTML = "<table id='grid'>";
+  puzzle.grid.forEach((row,r)=>{
+    gridHTML+="<tr>";
+    row.forEach((cell,c)=>{
+      if(cell==="") gridHTML+="<td class='blank'></td>";
+      else gridHTML+=`<td><input maxlength="1" data-row="${r}" data-col="${c}" oninput="filterInput(this)" onfocus="highlightWord(this)"></td>`;
+    });
+    gridHTML+="</tr>";
+  });
+  gridHTML+="</table>";
+
+  let cluesHTML="<h3>Across</h3><ul>";
+  for(const [num,clue] of Object.entries(puzzle.clues.across)) cluesHTML+=`<li>${num}. ${clue}</li>`;
+  cluesHTML+="</ul><h3>Down</h3><ul>";
+  for(const [num,clue] of Object.entries(puzzle.clues.down)) cluesHTML+=`<li>${num}. ${clue}</li>`;
+  cluesHTML+="</ul>";
+
+  gameDiv.innerHTML = gridHTML+cluesHTML;
+  document.querySelectorAll("#grid input").forEach(input=>input.addEventListener("keydown", handleNavigation));
+}
+
+function filterInput(inputEl){
+  let val = inputEl.value.toUpperCase().replace(/[^A-Z]/g,"");
+  inputEl.value = val;
+  if(val){
+    const row=parseInt(inputEl.dataset.row),col=parseInt(inputEl.dataset.col);
+    if(acrossMode){
+      const nextCell=document.querySelector(`#grid input[data-row='${row}'][data-col='${col+1}']`);
+      if(nextCell) nextCell.focus();
+    }else{
+      const nextCell=document.querySelector(`#grid input[data-row='${row+1}'][data-col='${col}']`);
+      if(nextCell) nextCell.focus();
+    }
+  }
+}
+
+function handleNavigation(e){
+  const row=parseInt(this.dataset.row),col=parseInt(this.dataset.col);
+  const nextCell=(r,c)=>document.querySelector(`#grid input[data-row='${r}'][data-col='${c}']`);
+  switch(e.key){
+    case "ArrowUp": e.preventDefault(); if(row>0) nextCell(row-1,col)?.focus(); break;
+    case "ArrowDown": e.preventDefault(); if(row<currentPuzzle.grid.length-1) nextCell(row+1,col)?.focus(); break;
+    case "ArrowLeft": e.preventDefault(); if(col>0) nextCell(row,col-1)?.focus(); break;
+    case "ArrowRight": e.preventDefault(); if(col<currentPuzzle.grid[row].length-1) nextCell(row,col+1)?.focus(); break;
+    case "Backspace":
+      if(this.value===""){
+        if(acrossMode && col>0) nextCell(row,col-1)?.focus();
+        else if(!acrossMode && row>0) nextCell(row-1,col)?.focus();
+      }else this.value="";
+      break;
+    case " ": e.preventDefault(); acrossMode=!acrossMode; highlightWord(this); break;
+  }
+}
+
+function getActiveCell(){
+  const active=document.activeElement;
+  if(active && active.tagName==="INPUT") return {row:parseInt(active.dataset.row),col:parseInt(active.dataset.col)};
+  return null;
+}
+
+function highlightWord(inputEl){
+  document.querySelectorAll("#grid input").forEach(i=>i.classList.remove("highlight"));
+  const row=parseInt(inputEl.dataset.row),col=parseInt(inputEl.dataset.col);
+  if(acrossMode){
+    let c=col; while(c>=0 && currentPuzzle.grid[row][c]!=="") c--; c++;
+    while(c<currentPuzzle.grid[row].length && currentPuzzle.grid[row][c]!==""){
+      document.querySelector(`#grid input[data-row='${row}'][data-col='${c}']`)?.classList.add("highlight"); c++;
+    }
+  }else{
+    let r=row; while(r>=0 && currentPuzzle.grid[r][col]!=="") r--; r++;
+    while(r<currentPuzzle.grid.length && currentPuzzle.grid[r][col]!==""){
+      document.querySelector(`#grid input[data-row='${r}'][data-col='${col}']`)?.classList.add("highlight"); r++;
+    }
+  }
+}
+
+function checkAnswers(){
+  let correct=true;
+  document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{
+    rowEl.querySelectorAll("td").forEach((cellEl,c)=>{
+      const inputEl=cellEl.querySelector("input");
+      if(inputEl && currentPuzzle.grid[r][c]){
+        if(inputEl.value.toUpperCase()===currentPuzzle.grid[r][c]){
+          inputEl.classList.add("correct"); inputEl.classList.remove("incorrect");
+        }else{ inputEl.classList.add("incorrect"); inputEl.classList.remove("correct"); correct=false; }
+      }
+    });
+  });
+  if(correct){ document.getElementById("result").textContent=`🎉 Solved in ${timer}s!`; clearInterval(timerInterval);}
+  else document.getElementById("result").textContent="❌ Some answers are incorrect.";
+}
+
+function revealPuzzle(){
+  document.querySelectorAll("#grid tr").forEach((rowEl,r)=>{
+    rowEl.querySelectorAll("td").forEach((cellEl,c)=>{
+      const inputEl=cellEl.querySelector("input");
+      if(inputEl && currentPuzzle.grid[r][c]){
+        inputEl.value=currentPuzzle.grid[r][c]; inputEl.classList.add("correct");
+      }
+    });
+  });
+  document.getElementById("result").textContent="✨ Puzzle revealed!";
+}
+
+function revealWord(){
+  const cell=getActiveCell();
+  if(!cell){ document.getElementById("result").textContent="Click a cell first!"; return; }
+  if(acrossMode){
+    let startCol=cell.col; while(startCol>0 && currentPuzzle.grid[cell.row][startCol-1]!=="") startCol--;
+    let c=startCol;
+    while(c<currentPuzzle.grid[cell.row].length && currentPuzzle.grid[cell.row][c]!==""){
+      const inputEl=document.querySelector(`#grid input[data-row='${cell.row}'][data-col='${c}']`);
+      inputEl.value=currentPuzzle.grid[cell.row][c]; inputEl.classList.add("correct"); c++;
+    }
+  }else{
+    let startRow=cell.row; while(startRow>0 && currentPuzzle.grid[startRow-1][cell.col]!=="") startRow--;
+    let r=startRow;
+    while(r<currentPuzzle.grid.length && currentPuzzle.grid[r][cell.col]!==""){
+      const inputEl=document.querySelector(`#grid input[data-row='${r}'][data-col='${cell.col}']`);
+      inputEl.value=currentPuzzle.grid[r][cell.col]; inputEl.classList.add("correct"); r++;
+    }
+  }
+  document.getElementById("result").textContent="💡 Word revealed!";
+}
+
+renderPuzzle(currentPuzzle);
+startTimer();
+</script>
+</body>
+</html>
